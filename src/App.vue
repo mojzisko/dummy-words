@@ -12,6 +12,9 @@ import WordList from './components/WordList.vue';
 import AddWordModal from './components/AddWordModal.vue';
 import { nextTick } from 'vue';
 
+// This app took me probably 5 hours, because I wanted to sort out all the problems that I faced. 
+// I had few issues with Vue npm packages such as VueDraggable and also with infinite scroll for better app performance. 
+
 export default defineComponent({
   name: 'App',
   components: {
