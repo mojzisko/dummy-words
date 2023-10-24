@@ -137,7 +137,7 @@ export default defineComponent({
 }
 
 .word-item:last-child {
-  border-bottom: none.
+  border-bottom: none
 }
 
 .is-dragging {
