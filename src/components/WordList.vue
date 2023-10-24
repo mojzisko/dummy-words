@@ -1,6 +1,6 @@
 <template>
   <div class="drag-area" style="height: 400px; overflow-y: auto;" @scroll="handleScroll">
-    <VueDraggableNext v-model="displayedWords" @end="handleDragEnd">
+    <VueDraggableNext v-model="displayedWords" @end="handleDragEnd" :disabled="isButtonDisabled">
       <div
         v-for="(word, index) in displayedWords"
         :key="index"
@@ -8,7 +8,7 @@
         :class="{ 'is-dragging': isDragging }"
       >
         {{ word }}
-        <button class="delete-button" @click="removeWord(index)">Smazat slovíčko</button>
+        <button class="delete-button" @click="removeWord(index)" :disabled="isButtonDisabled">Smazat slovíčko</button>
       </div>
     </VueDraggableNext>
     <div v-if="loadingMore" class="loading-indicator">Loading more items...</div>
@@ -16,8 +16,12 @@
 </template>
 
 <script lang="ts">
-import { defineComponent, PropType, ref, watch, onMounted, toRefs, Ref } from 'vue';
+import { defineComponent, PropType, Ref, ref, computed, watch, onMounted, toRefs } from 'vue';
 import { VueDraggableNext } from 'vue-draggable-next';
+
+interface WordListProps {
+  words: string[];
+}
 
 export default defineComponent({
   name: 'WordList',
@@ -27,71 +31,76 @@ export default defineComponent({
   props: {
     words: { type: Array as PropType<string[]>, required: true },
   },
-  setup(props, { emit }) {
+  setup(props: WordListProps, { emit }) {
     const { words } = toRefs(props);
     const batchSize: number = 30;
-    const displayedWords: Ref<string[]> = ref<string[]>([]);
     const isDragging: Ref<boolean> = ref(false);
     const loadingMore: Ref<boolean> = ref(false);
     const currentEndIndex: Ref<number> = ref(batchSize);
+    const isDeleting: Ref<boolean> = ref(false);
 
-    onMounted(() => {
-      if (words.value) {
-        displayedWords.value = words.value.slice(0, batchSize); 
+    const displayedWords = computed<string[]>(() => words.value.slice(0, currentEndIndex.value));
+    const hasMoreWords = computed<boolean>(() => currentEndIndex.value < words.value.length);
+    const isButtonDisabled = computed<boolean>(() => isDeleting.value);
+
+    watch(words, (newVal: string[] | undefined) => {
+      if (newVal) {
+        currentEndIndex.value = Math.min(newVal.length, currentEndIndex.value);
       }
     });
 
-    watch(words, (newVal: string[]) => {
-      if (newVal) {
-        displayedWords.value = newVal.slice(0, currentEndIndex.value);
+    watch(isButtonDisabled, (newVal: boolean) => {
+      console.log('watched deleting', newVal)
+      emit('deleting-status-changed', newVal);  // Notifying parent component about deleting state
+    });
+
+    onMounted(() => {
+      if (words.value.length > 0) {
+        currentEndIndex.value = Math.min(words.value.length, batchSize);
       }
     });
 
     const loadMoreWords = (): void => {
-      if (currentEndIndex.value < words.value.length) {
-        const nextEndIndex: number = currentEndIndex.value + batchSize;
-        displayedWords.value = [
-          ...displayedWords.value,
-          ...words.value.slice(currentEndIndex.value, nextEndIndex),
-        ];
-        currentEndIndex.value = nextEndIndex;
-        loadingMore.value = false;
+      if (hasMoreWords.value) {
+        loadingMore.value = true;
+        setTimeout(() => {
+          const nextIndex = currentEndIndex.value + batchSize;
+          currentEndIndex.value = nextIndex <= words.value.length ? nextIndex : words.value.length;
+          loadingMore.value = false;
+        }, 1000); 
       }
     };
 
-    const handleScroll = async (event: Event): Promise<void> => {
-      const target = event.target as HTMLElement; 
-      if (target.scrollHeight - target.scrollTop <= target.clientHeight && !loadingMore.value) {
-        loadingMore.value = true;
-        await new Promise(resolve => setTimeout(resolve, 1000));
+    const handleScroll = (event: Event): void => {
+      const target = event.target as HTMLElement;
+      if (target.scrollHeight - target.scrollTop <= target.clientHeight && !loadingMore.value && hasMoreWords.value) {
         loadMoreWords();
       }
     };
 
     const removeWord = (index: number): void => {
-      // Remove the word from the original array, not the displayed subset
-      const actualIndex = index + (currentEndIndex.value - displayedWords.value.length);
-      words.value.splice(actualIndex, 1);
-      // Update the displayed words.
-      displayedWords.value.splice(index, 1);
-      emit('update-words', words.value);
+      isDeleting.value = true;
+      // Fake delay to simulate server response time.
+      setTimeout(() => {
+        const actualIndex = index + (currentEndIndex.value - displayedWords.value.length);
+        words.value.splice(actualIndex, 1);
+        emit('update-words', words.value); // Notifying the parent component.
+        isDeleting.value = false; 
+      }, 1000);
     };
 
-    const handleDragEnd = (event: any): void => {
+    const handleDragEnd = (event: { oldIndex: number; newIndex: number }): void => {
       isDragging.value = false;
-      // I had a problem with localStorage and infinitescroll loading with the actual words after a drag
-      const oldIndex = event.oldIndex;
-      const newIndex = event.newIndex;
-      if (typeof oldIndex === 'number' && typeof newIndex === 'number' && oldIndex !== newIndex) {
+      const { oldIndex, newIndex } = event;
+
+      if (oldIndex !== newIndex) {
         const actualOldIndex = oldIndex + (currentEndIndex.value - displayedWords.value.length);
         const actualNewIndex = newIndex + (currentEndIndex.value - displayedWords.value.length);
 
-        // Adjust the original words array
-        const [removed] = words.value.splice(actualOldIndex, 1);
-        words.value.splice(actualNewIndex, 0, removed);
+        const movedItem = words.value.splice(actualOldIndex, 1)[0];
+        words.value.splice(actualNewIndex, 0, movedItem);
+        emit('update-words', words.value); 
       }
-
-      emit('update-words', words.value); 
     };
 
     return {
@@ -101,10 +110,13 @@ export default defineComponent({
       handleScroll,
       loadingMore,
       removeWord,
+      isButtonDisabled,
+      hasMoreWords,
     };
   },
 });
 </script>
+
 
 
 <style scoped>
@@ -125,7 +137,7 @@ export default defineComponent({
 }
 
 .word-item:last-child {
-  border-bottom: none;
+  border-bottom: none.
 }
 
 .is-dragging {

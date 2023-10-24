@@ -1,13 +1,13 @@
 <template>
   <div id="app">
-    <button @click="isAddWordModalOpen = true">Přidat fajné slovíčko</button>
-    <word-list :words="words" @word-removed="handleWordRemoved" @update-words="handleWordsUpdate"></word-list>
+    <button :disabled="isDeletingComputed" @click="isAddWordModalOpen = true">Přidat fajné slovíčko</button>
+    <word-list :words="words" @word-removed="handleWordRemoved" @deleting-status-changed="handleDeletingStatusChange" @update-words="handleWordsUpdate"></word-list>
     <add-word-modal v-if="isAddWordModalOpen" @close-modal="isAddWordModalOpen = false" @word-added="handleWordAdded"></add-word-modal>
   </div>
 </template>
 
 <script lang="ts">
-import { defineComponent, onMounted, ref, Ref } from 'vue'; 
+import { defineComponent, onMounted, computed, ref, Ref } from 'vue'; 
 import WordList from './components/WordList.vue';
 import AddWordModal from './components/AddWordModal.vue';
 import { nextTick } from 'vue';
@@ -24,6 +24,14 @@ export default defineComponent({
   setup() {
     const words: Ref<string[]> = ref<string[]>([]);
     const isAddWordModalOpen: Ref<boolean> = ref(false);
+    const isDeleting: Ref<boolean> = ref(false);
+    
+    const handleDeletingStatusChange = (status: boolean) => {
+      console.log('ahoj', status)
+      isDeleting.value = status;
+    };
+
+    const isDeletingComputed = computed(() => isDeleting.value);
 
     const generateDummyWords = (count: number): string[] => {
       const wordsArray: string[] = [];
@@ -74,6 +82,8 @@ export default defineComponent({
       handleWordsUpdate,
       handleWordAdded,
       handleWordRemoved,
+      isDeletingComputed,
+      handleDeletingStatusChange,
     };
   },
 });
